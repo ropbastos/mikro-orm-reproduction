@@ -1,4 +1,4 @@
-import { Entity, MikroORM, PrimaryKey, Property } from '@mikro-orm/sqlite';
+import { Entity, MikroORM, PrimaryKey, Property, ScalarReference } from '@mikro-orm/sqlite';
 
 @Entity()
 class User {
@@ -11,6 +11,14 @@ class User {
 
   @Property({ unique: true })
   email: string;
+
+  @Property({
+    type: 'text',
+    nullable: true,
+    lazy: true,
+    ref: true
+  })
+  reallyBigBio!: ScalarReference<string | null>;
 
   constructor(name: string, email: string) {
     this.name = name;
@@ -36,16 +44,24 @@ afterAll(async () => {
 });
 
 test('basic CRUD example', async () => {
-  orm.em.create(User, { name: 'Foo', email: 'foo' });
+  orm.em.create(User, { name: 'Foo', email: 'foo', reallyBigBio: null });
   await orm.em.flush();
   orm.em.clear();
 
   const user = await orm.em.findOneOrFail(User, { email: 'foo' });
-  expect(user.name).toBe('Foo');
-  user.name = 'Bar';
-  orm.em.remove(user);
-  await orm.em.flush();
+  expect(user.reallyBigBio.isInitialized()).toBe(false);
+  //@ts-expect-error $ should be undefined if not yet populated.
+  const whatever = user.reallyBigBio.$
 
-  const count = await orm.em.count(User, { email: 'foo' });
-  expect(count).toBe(0);
+  const userWithBioPopulated = await orm.em.populate(user, ['reallyBigBio']);
+
+  // This typechecks
+  const definitelyAString: string = userWithBioPopulated.reallyBigBio.$
+  const doSomethingWithString = (s: string) => {
+    const something = s.replace('foo', 'bar');
+    return something;
+  }
+
+  // Oops
+  expect(() => doSomethingWithString(definitelyAString)).toThrow();
 });
